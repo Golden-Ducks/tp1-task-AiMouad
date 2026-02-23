@@ -25,10 +25,10 @@ def normalize_text(text):
     text = text.lower()
     
     # Remove punctuation manually
-    cleaned = ""
-    for char in text:
-        if char.isalnum() or char.isspace():
-            cleaned += char
+    cln = ""
+    for c in text:
+        if c.isalnum() or c.isspace():
+            cleaned += c
         else:
             cleaned += " "
     
