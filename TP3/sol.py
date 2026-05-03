@@ -1,187 +1,154 @@
-
 import math
+import string
+import random
 
-corpus = [
-    "the cat sat on the mat","the dog sat on the log",
-    "the cat and the dog are friends",
+STOP_WORDS = {"the", "is", "a", "an", "in", "of", "to", "and"}
+
+raw_corpus = [
+    "Luna eats food.",
+    "The dog loves food.",
+    "The AI is massive.",
 ]
 
-# STEP 1 — Tokenization
+def clean(doc):
+    doc = doc.lower()
+    doc = doc.translate(str.maketrans("", "", string.punctuation))
+    return [w for w in doc.split() if w not in STOP_WORDS]
 
-def tokenize(doc):
-
-    return doc.lower().split()
-
-# STEP 2 — Vocabulary
-def build_vocabulary(corpus):
-    
+def build_vocab(corpus):
     vocab = set()
-    for doc in corpus:
-        for word in tokenize(doc):
-            vocab.add(word)
+    for tokens in corpus:
+        vocab.update(tokens)
     return sorted(list(vocab))
 
-# STEP 3 — TF (Term Frequency)
-
-def compute_tf(doc):
-    
-    tokens = tokenize(doc)
-    total = len(tokens)
-    counts = {}
-    for token in tokens:
-        counts[token] = counts.get(token, 0) + 1
-    tf = {}
-    for word, count in counts.items():
-        tf[word] = count / total
-    return tf
-
-
-# STEP 4 — DF (Document Frequency)
-
 def compute_df(corpus):
-    
     df = {}
-    for doc in corpus:
-        unique_words = set(tokenize(doc))   # set → 1 count per doc
-        for word in unique_words:
+    for tokens in corpus:
+        for word in set(tokens):
             df[word] = df.get(word, 0) + 1
     return df
 
+def compute_idf(df, N):
+    return {word: math.log((N + 1) / (freq + 1)) + 1 for word, freq in df.items()}
 
-# STEP 5 — IDF (Inverse Document Frequency + Smoothing)
+def compute_tf(tokens):
+    total = len(tokens)
+    tf = {}
+    for word in tokens:
+        tf[word] = tf.get(word, 0) + 1
+    return {word: count / total for word, count in tf.items()}
 
-def compute_idf(corpus):
-    
-    N = len(corpus)
-    df = compute_df(corpus)
-    idf = {}
-    for word, freq in df.items():
-        idf[word] = math.log((1 + N) / (1 + freq)) + 1
-    return idf
+def to_vector(tf, idf, vocab):
+    return [tf.get(w, 0.0) * idf.get(w, 0.0) for w in vocab]
 
-
-# STEP 6 — TF-IDF
-
-def compute_tfidf(corpus):
-  
-    idf = compute_idf(corpus)
-    all_tfidf = []
-    for doc in corpus:
-        tf = compute_tf(doc)
-        tfidf = {}
-        for word, tf_score in tf.items():
-            tfidf[word] = tf_score * idf[word]
-        all_tfidf.append(tfidf)
-    return all_tfidf
+def cosine_similarity(a, b):
+    dot = sum(x * y for x, y in zip(a, b))
+    na = math.sqrt(sum(x**2 for x in a))
+    nb = math.sqrt(sum(x**2 for x in b))
+    return 0.0 if na == 0 or nb == 0 else dot / (na * nb)
 
 
-def to_vector(tfidf, vocab):
-   
-    return [tfidf.get(word, 0.0) for word in vocab]
+cleaned = [clean(doc) for doc in raw_corpus]
+vocab = build_vocab(cleaned)
+df = compute_df(cleaned)
+N = len(cleaned)
+idf = compute_idf(df, N)
+all_tf = [compute_tf(tokens) for tokens in cleaned]
+tfidf_vectors = [to_vector(tf, idf, vocab) for tf in all_tf]
 
+print("=" * 55)
+print("STEP 1 — Cleaned Corpus")
+print("=" * 55)
+for i, tokens in enumerate(cleaned):
+    print(f"  Doc{i+1}: {tokens}")
 
-# STEP 7 — Cosine Similarity
+print("\n" + "=" * 55)
+print("STEP 2 — Vocabulary")
+print("=" * 55)
+print(f"  Vocab ({len(vocab)} words): {vocab}")
 
-def cosine_similarity(vec_a, vec_b):
-    """
-    cos(A, B) = (A · B) / (||A|| × ||B||)
+print("\n" + "=" * 55)
+print("STEP 3 — Document Frequency (DF)")
+print("=" * 55)
+print(f"  {'Word':<12} {'Appears in':<25} DF")
+print(f"  {'-'*12} {'-'*25} --")
+for word in vocab:
+    appears = [f"d{i+1}" for i, t in enumerate(cleaned) if word in t]
+    print(f"  {word:<12} {', '.join(appears):<25} {df[word]}")
 
-    """
-    dot_product = sum(a * b for a, b in zip(vec_a, vec_b))
-    norm_a = math.sqrt(sum(a ** 2 for a in vec_a))
-    norm_b = math.sqrt(sum(b ** 2 for b in vec_b))
-    if norm_a == 0 or norm_b == 0:
-        return 0.0
-    return dot_product / (norm_a * norm_b)
+print("\n" + "=" * 55)
+print("STEP 4 — IDF (Smoothed)")
+print("=" * 55)
+print(f"  Formula: log((N+1) / (DF+1)) + 1    N={N}\n")
+print(f"  {'Word':<12} {'DF':<5} {'Calculation':<25} IDF")
+print(f"  {'-'*12} {'-'*5} {'-'*25} -----")
+for word in vocab:
+    d = df[word]
+    print(f"  {word:<12} {d:<5} log({N+1}/{d+1}) + 1{'':>12} {idf[word]:.4f}")
 
+print("\n" + "=" * 55)
+print("STEP 5 — TF (Term Frequency)")
+print("=" * 55)
+for i, (tokens, tf) in enumerate(zip(cleaned, all_tf)):
+    total = len(tokens)
+    print(f"\n  Doc{i+1}: {tokens}  (total={total})")
+    print(f"  {'Word':<12} Count    TF")
+    print(f"  {'-'*12} -----    ------")
+    for word in tokens:
+        count = int(round(tf[word] * total))
+        print(f"  {word:<12} {count}/{total}      {tf[word]:.4f}")
 
-# MAIN — Run everything & print results
-
-if __name__ == "__main__":
-
-    SEP = "=" * 55
-
-    # ── Vocabulary 
-    print(SEP)
-    print("— Vocabulary")
-    print(SEP)
-    vocab = build_vocabulary(corpus)
-    print(f"Vocab ({len(vocab)} words): {vocab}\n")
-
-    # ── TF 
-    print(SEP)
-    print("— Term Frequency (TF)")
-    print(SEP)
-    for i, doc in enumerate(corpus):
-        tf = compute_tf(doc)
-        print(f"Doc{i+1}: \"{doc}\"")
-        for word, score in sorted(tf.items()):
-            print(f"   TF('{word}') = {score:.4f}")
-        print()
-
-    # ── DF 
-    print(SEP)
-    print("— Document Frequency (DF)")
-    print(SEP)
-    df = compute_df(corpus)
-    for word, freq in sorted(df.items(), key=lambda x: -x[1]):
-        print(f"   DF('{word}') = {freq}")
+print("\n" + "=" * 55)
+print("STEP 6 — TF-IDF Vectors")
+print("=" * 55)
+print(f"  {'Word':<12}", end="")
+for i in range(N):
+    print(f"  {'Doc'+str(i+1):<10}", end="")
+print()
+print(f"  {'-'*12}", end="")
+for i in range(N):
+    print(f"  {'-'*10}", end="")
+print()
+for j, word in enumerate(vocab):
+    print(f"  {word:<12}", end="")
+    for i in range(N):
+        val = tfidf_vectors[i][j]
+        print(f"  {val:.4f}    ", end="")
     print()
 
-    # ── IDF 
-    print(SEP)
-    print("— Inverse Document Frequency (IDF + Smoothing)")
-    print(SEP)
-    N = len(corpus)
-    idf = compute_idf(corpus)
-    for word, score in sorted(idf.items(), key=lambda x: x[1]):
-        raw = math.log((1 + N) / (1 + df[word]))
-        print(f"   IDF('{word}') = log({1+N}/{1+df[word]}) + 1"
-              f" = {raw:.4f} + 1 = {score:.4f}")
-    print()
+query_raw = "AI food"
+query_tokens = clean(query_raw)
+query_tf = compute_tf(query_tokens)
+query_vector = to_vector(query_tf, idf, vocab)
 
-    # ── TF-IDF 
-    print(SEP)
-    print("— TF-IDF Scores")
-    print(SEP)
-    all_tfidf = compute_tfidf(corpus)
-    for i, tfidf in enumerate(all_tfidf):
-        print(f"Doc{i+1}:")
-        for word, score in sorted(tfidf.items(), key=lambda x: -x[1]):
-            print(f"   TF-IDF('{word}') = {score:.4f}")
-        print()
+print("\n" + "=" * 55)
+print("STEP 7 — Query + Cosine Similarity")
+print("=" * 55)
+print(f"  Query: \"{query_raw}\" -> {query_tokens}\n")
+print(f"  Query TF-IDF vector:")
+for j, word in enumerate(vocab):
+    mark = " <--" if word in query_tokens else ""
+    print(f"    {word:<12} {query_vector[j]:.4f}{mark}")
 
-    # ── Vectors 
-    print(SEP)
-    print("— TF-IDF Vectors (aligned with vocab)")
-    print(SEP)
-    vectors = [to_vector(t, vocab) for t in all_tfidf]
-    header = f"{'word':<10}" + "".join(f"  Doc{i+1}  " for i in range(len(corpus)))
-    print(header)
-    print("-" * len(header))
-    for j, word in enumerate(vocab):
-        row = f"{word:<10}"
-        for vec in vectors:
-            row += f"  {vec[j]:.4f}"
-        print(row)
-    print()
+print(f"\n  {'Doc':<8} cos(Q, Doc)     Result")
+print(f"  {'-'*8} -----------     ------")
+results = [(i, cosine_similarity(query_vector, v)) for i, v in enumerate(tfidf_vectors)]
+best = max(results, key=lambda x: x[1])
+for i, sim in results:
+    tag = "Most similar" if i == best[0] else ""
+    print(f"  Doc{i+1:<5} {sim:.4f}          {tag}")
 
-    # ── Cosine Similarity 
-    print(SEP)
-    print("— Cosine Similarity")
-    print(SEP)
-    for i in range(len(vectors)):
-        for j in range(i + 1, len(vectors)):
-            sim = cosine_similarity(vectors[i], vectors[j])
-            print(f"   cos(Doc{i+1}, Doc{j+1}) = {sim:.4f}")
-    print()
+print(f"\n  Best match: Doc{best[0]+1} -- \"{raw_corpus[best[0]]}\"")
 
-    # ── Full matrix 
-    print("Full similarity matrix:")
-    header = f"{'':>6}" + "".join(f"  Doc{i+1} " for i in range(len(corpus)))
-    print(header)
-    for i, va in enumerate(vectors):
-        row = f"Doc{i+1}  "
-        for j, vb in enumerate(vectors):
-            row += f"  {cosine_similarity(va, vb):.4f}"
-        print(row)
+print("\n" + "=" * 55)
+print("BONUS — TP website example")
+print("=" * 55)
+A = [0, 1.2, 1.6]
+B = [0, 0.8, 1.4]
+dot = sum(a * b for a, b in zip(A, B))
+nA = math.sqrt(sum(a**2 for a in A))
+nB = math.sqrt(sum(b**2 for b in B))
+print(f"  A={A}  B={B}")
+print(f"  A.B  = {dot:.4f}")
+print(f"  ||A|| = {nA:.4f}   ||B|| = {nB:.4f}")
+print(f"  cos  = {dot / (nA * nB):.4f}  (tp gives 0.99) ok")
